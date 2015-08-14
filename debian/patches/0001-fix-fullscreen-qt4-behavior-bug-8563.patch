@@ -1,0 +1,50 @@
+Description: Fix fullscreen behavior in Qt based apps
+Origin: https://bugzilla.xfce.org/show_bug.cgi?id=8563
+Forwarded: yes
+Author: Viktor Semykin
+
+---
+ src/client.c |   16 ++++++++++------
+ 1 file changed, 10 insertions(+), 6 deletions(-)
+
+--- a/src/client.c
++++ b/src/client.c
+@@ -981,8 +981,12 @@ clientGetMWMHints (Client *c, gboolean u
+         wc.width = c->width;
+         wc.height = c->height;
+ 
++        if (FLAG_TEST (c->flags, CLIENT_FLAG_FULLSCREEN))
++        {
++            clientUpdateFullscreenSize (c);
++        }
+         /* If client is maximized, we need to update its coordonates and size as well */
+-        if (FLAG_TEST (c->flags, CLIENT_FLAG_MAXIMIZED))
++        else if (FLAG_TEST (c->flags, CLIENT_FLAG_MAXIMIZED))
+         {
+             GdkRectangle rect;
+             myScreenFindMonitorAtPoint (screen_info,
+@@ -3538,8 +3542,12 @@ clientScreenResize(ScreenInfo *screen_in
+             continue;
+         }
+ 
++        if (FLAG_TEST (c->flags, CLIENT_FLAG_FULLSCREEN))
++        {
++            clientUpdateFullscreenSize (c);
++        }
+         /* Recompute size and position of maximized windows */
+-        if (FLAG_TEST (c->flags, CLIENT_FLAG_MAXIMIZED))
++        else if (FLAG_TEST (c->flags, CLIENT_FLAG_MAXIMIZED))
+         {
+             maximization_flags = c->flags & CLIENT_FLAG_MAXIMIZED;
+ 
+@@ -3553,10 +3561,6 @@ clientScreenResize(ScreenInfo *screen_in
+             wc.height = c->height;
+             clientConfigure (c, &wc, CWX | CWY | CWWidth | CWHeight, CFG_NOTIFY);
+         }
+-        else if (FLAG_TEST (c->flags, CLIENT_FLAG_FULLSCREEN))
+-        {
+-            clientUpdateFullscreenSize (c);
+-        }
+         else
+         {
+             configure_flags = CFG_CONSTRAINED | CFG_REQUEST;
