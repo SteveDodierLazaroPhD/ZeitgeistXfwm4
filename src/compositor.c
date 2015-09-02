@@ -49,6 +49,7 @@
 #include "client.h"
 #include "frame.h"
 #include "hints.h"
+#include "logger.h"
 #include "compositor.h"
 
 #ifdef HAVE_COMPOSITOR
@@ -2867,6 +2868,7 @@ compositorAddWindow (DisplayInfo *display_info, Window id, Client *c)
 
     if (!compositorSetClient (display_info, id, c))
     {
+        logCompAddWindow(id, c);
         add_win (display_info, id, c);
     }
 #endif /* HAVE_COMPOSITOR */

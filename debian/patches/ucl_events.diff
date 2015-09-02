@@ -1,0 +1,1220 @@
+--- a/configure.ac
++++ b/configure.ac
+@@ -94,6 +94,7 @@
+ XDT_CHECK_PACKAGE([LIBWNCK], [libwnck-1.0], [wnck_minimum_version])
+ XDT_CHECK_PACKAGE([DBUS], [dbus-1], [1.0.0])
+ XDT_CHECK_PACKAGE([DBUS_GLIB], [dbus-glib-1], [0.72])
++XDT_CHECK_PACKAGE([LIBZEITGEIST], [zeitgeist-1.0], [0.3])
+ 
+ dnl
+ dnl Sync to vblank support
+--- a/src/Makefile.am
++++ b/src/Makefile.am
+@@ -24,6 +24,8 @@
+ 	inline-default-icon.h						\
+ 	keyboard.c							\
+ 	keyboard.h							\
++	logger.c							\
++	logger.h							\
+ 	main.c								\
+ 	menu.c								\
+ 	menu.h								\
+@@ -55,6 +57,8 @@
+ 	stacking.h							\
+ 	startup_notification.c						\
+ 	startup_notification.h						\
++	sync_source.c						\
++	sync_source.h						\
+ 	tabwin.c							\
+ 	tabwin.h							\
+ 	terminate.c							\
+@@ -69,6 +73,8 @@
+ 	workspaces.h							\
+ 	xsync.c								\
+ 	xsync.h								\
++	zeitgeist_manager.c								\
++	zeitgeist_manager.h								\
+ 	xpm-color-table.h
+ 
+ xfwm4_CFLAGS =								\
+@@ -83,6 +89,7 @@
+ 	$(LIBDRM_CFLAGS)						\
+ 	$(LIBSTARTUP_NOTIFICATION_CFLAGS)				\
+ 	$(COMPOSITOR_CFLAGS)						\
++	$(LIBZEITGEIST_CFLAGS)            \
+ 	-DPACKAGE_LOCALE_DIR=\"$(localedir)\"				\
+ 	-DDATADIR=\"$(datadir)\"					\
+ 	-DHELPERDIR=\"$(HELPER_PATH_PREFIX)\"				\
+@@ -102,7 +109,8 @@
+ 	$(RENDER_LIBS)							\
+ 	$(COMPOSITOR_LIBS)						\
+ 	$(RANDR_LIBS) 							\
+-	$(MATH_LIBS)
++	$(MATH_LIBS)	            \
++	$(LIBZEITGEIST_LIBS)
+ 
+ EXTRA_DIST = 								\
+ 	default_icon.png						\
+--- a/src/client.c
++++ b/src/client.c
+@@ -48,6 +48,7 @@
+ #include "frame.h"
+ #include "hints.h"
+ #include "icons.h"
++#include "logger.h"
+ #include "misc.h"
+ #include "moveresize.h"
+ #include "mypixmap.h"
+@@ -199,6 +200,7 @@
+     gchar *hostname;
+     gchar *wm_name;
+     gchar *name;
++    gchar *old_name = NULL;
+     gboolean refresh;
+ 
+     g_return_if_fail (c != NULL);
+@@ -231,6 +233,7 @@
+             {
+                 refresh = TRUE;
+                 FLAG_SET (c->flags, CLIENT_FLAG_NAME_CHANGED);
++                old_name = g_strdup (c->name);
+             }
+             g_free (c->name);
+         }
+@@ -240,6 +243,8 @@
+     if (refresh)
+     {
+         frameQueueDraw (c, TRUE);
++        logWindowNameChange (c, old_name);
++        free (old_name);
+     }
+ }
+ 
+@@ -2166,6 +2171,7 @@
+     if (c->win_workspace != ws)
+     {
+         TRACE ("setting client \"%s\" (0x%lx) to current_ws %d", c->name, c->window, ws);
++        logClientSetWorkspace (c, c->win_workspace, ws);
+         c->win_workspace = ws;
+         if (FLAG_TEST (c->flags, CLIENT_FLAG_STICKY))
+         {
+@@ -2542,6 +2548,7 @@
+ 
+     TRACE ("entering clientClose");
+     TRACE ("closing client \"%s\" (0x%lx)", c->name, c->window);
++    logClientClose(c);
+ 
+     screen_info = c->screen_info;
+     display_info = screen_info->display_info;
+@@ -2584,6 +2591,8 @@
+     screen_info = c->screen_info;
+     display_info = screen_info->display_info;
+ 
++    logClientTerminate(c);
++
+     if ((c->hostname) && (c->pid > 0))
+     {
+         if (!strcmp (display_info->hostname, c->hostname))
+--- a/src/compositor.c
++++ b/src/compositor.c
+@@ -49,6 +49,7 @@
+ #include "client.h"
+ #include "frame.h"
+ #include "hints.h"
++#include "logger.h"
+ #include "compositor.h"
+ 
+ #ifdef HAVE_COMPOSITOR
+@@ -2867,6 +2868,7 @@
+ 
+     if (!compositorSetClient (display_info, id, c))
+     {
++        logCompAddWindow(id, c);
+         add_win (display_info, id, c);
+     }
+ #endif /* HAVE_COMPOSITOR */
+--- a/src/focus.c
++++ b/src/focus.c
+@@ -47,6 +47,7 @@
+ #include "workspaces.h"
+ #include "hints.h"
+ #include "netwm.h"
++#include "logger.h"
+ 
+ typedef struct _ClientPair ClientPair;
+ struct _ClientPair
+@@ -527,6 +528,7 @@
+ clientSetFocus (ScreenInfo *screen_info, Client *c, guint32 timestamp, unsigned short flags)
+ {
+     Client *c2;
++    unsigned short taking_focus = 0;
+ 
+     TRACE ("entering clientSetFocus");
+ 
+@@ -564,6 +566,7 @@
+         if (FLAG_TEST (c->wm_flags, WM_FLAG_INPUT) || !(screen_info->params->focus_hint))
+         {
+             pending_focus = c;
++            taking_focus = 1;
+             /*
+              * When shaded, the client window is unmapped, so it can not be focused.
+              * Instead, we focus the frame that is still mapped.
+@@ -592,6 +595,7 @@
+         if (FLAG_TEST(c->wm_flags, WM_FLAG_TAKEFOCUS))
+         {
+             pending_focus = c;
++            taking_focus = 1;
+             sendClientMessage (c->screen_info, c->window, WM_TAKE_FOCUS, timestamp);
+         }
+     }
+@@ -603,6 +607,9 @@
+         clientFocusNone (screen_info, c2, timestamp);
+         clientClearDelayedFocus ();
+     }
++
++    if(taking_focus)
++        logSetFocus(c, timestamp);
+ }
+ 
+ void
+--- /dev/null
++++ b/src/logger.c
+@@ -0,0 +1,315 @@
++/*      $Id$
++
++        This program is free software; you can redistribute it and/or modify
++        it under the terms of the GNU General Public License as published by
++        the Free Software Foundation; either version 2, or (at your option)
++        any later version.
++
++        This program is distributed in the hope that it will be useful,
++        but WITHOUT ANY WARRANTY; without even the implied warranty of
++        MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++        GNU General Public License for more details.
++
++        You should have received a copy of the GNU General Public License
++        along with this program; if not, write to the Free Software
++        Foundation, Inc., Inc., 51 Franklin Street, Fifth Floor, Boston,
++        MA 02110-1301, USA.
++
++
++        oroborus - (c) 2001 Ken Lynch
++        xfwm4    - (c) 2002-2015 Olivier Fourdan
++        xfwm4-zg - (c) 2015 Steve Dodier-Lazaro
++
++ */
++
++#ifdef HAVE_CONFIG_H
++#include "config.h"
++#endif
++
++#include <stdlib.h>
++#include <stdio.h>
++#include <string.h>
++#include <unistd.h>
++
++#include <X11/Xlib.h>
++
++#include <glib.h>
++#include <sys/time.h>
++#include <time.h>
++#include <zeitgeist.h>
++
++#include "client.h"
++#include "logger.h"
++#include "sync_source.h"
++#include "zeitgeist_manager.h"
++
++void logWindowNameChange (Client *c, const gchar *old_name)
++{
++    if(!c) return;
++    TRACE ("Client %p changed name to %s\n", c, c->name);
++
++    ZeitgeistManager *manager  = manager_get ();
++    char             *actor    = manager_get_actor_name_from_pid (c->pid);
++    ZeitgeistEvent   *event    = zeitgeist_event_new ();
++
++    zeitgeist_event_set_interpretation (event, UCL_STUDY_WINDOW_TITLE_CHANGE_EVENT);
++    zeitgeist_event_set_manifestation (event, ZEITGEIST_ZG_SCHEDULED_ACTIVITY);
++    zeitgeist_event_set_actor (event, actor);
++    free (actor);
++
++    ZeitgeistSubject *subject = zeitgeist_subject_new ();
++    zeitgeist_subject_set_uri (subject, c->name? c->name : "n/a");
++    zeitgeist_subject_set_interpretation (subject, ZEITGEIST_NFO_SOFTWARE);
++    zeitgeist_subject_set_origin (subject, old_name);
++    zeitgeist_subject_set_manifestation (subject, ZEITGEIST_NFO_SOFTWARE_ITEM);
++    zeitgeist_subject_set_mimetype (subject, "text/plain");
++
++    gchar *text = g_strdup_printf ("UCL Study window title change (%s)", c->name);
++    zeitgeist_subject_set_text (subject, text);
++    free (text);
++
++    zeitgeist_event_add_subject (event, subject);
++
++    ZeitgeistSubject *usubject = manager_get_ucl_subject (c->window, c->pid);
++    zeitgeist_event_add_subject (event, usubject);
++
++    GError *error = NULL;
++    ZeitgeistLog *log = zeitgeist_log_get_default ();
++    zeitgeist_log_insert_events_no_reply (log, event, NULL, &error);
++
++    if (error)
++    {
++      g_warning ("Impossible to log event for window title change (%s): %s ", c->name, error->message);
++      g_error_free (error);
++    }
++}
++
++void logClientTerminate (Client *c)
++{
++    if(!c) return;
++    TRACE ("Client %p:%s will be terminated\n", c, c->name);
++
++    ZeitgeistManager *manager  = manager_get ();
++    char             *actor    = manager_get_actor_name_from_pid (c->pid);
++    ZeitgeistEvent   *event    = zeitgeist_event_new ();
++
++    zeitgeist_event_set_interpretation (event, UCL_STUDY_APP_CRASHED_EVENT);
++    zeitgeist_event_set_manifestation (event, ZEITGEIST_ZG_SCHEDULED_ACTIVITY);
++    zeitgeist_event_set_actor (event, actor);
++    free (actor);
++
++    ZeitgeistSubject *subject = zeitgeist_subject_new ();
++    zeitgeist_subject_set_uri (subject, c->name ? c->name : "n/a");
++    zeitgeist_subject_set_interpretation (subject, ZEITGEIST_NFO_SOFTWARE);
++    zeitgeist_subject_set_manifestation (subject, ZEITGEIST_NFO_SOFTWARE_ITEM);
++    zeitgeist_subject_set_mimetype (subject, "text/plain");
++
++    gchar *text = g_strdup_printf ("UCL Study app window froze (%s)", c->name);
++    zeitgeist_subject_set_text (subject, text);
++    free (text);
++
++    zeitgeist_event_add_subject (event, subject);
++
++    ZeitgeistSubject *usubject = manager_get_ucl_subject (c->window, c->pid);
++    zeitgeist_event_add_subject (event, usubject);
++
++    GError *error = NULL;
++    ZeitgeistLog *log = zeitgeist_log_get_default ();
++    zeitgeist_log_insert_events_no_reply (log, event, NULL, &error);
++
++    if (error)
++    {
++      g_warning ("Impossible to log event for window freezing (%s): %s ", c->name, error->message);
++      g_error_free (error);
++    }
++}
++
++void logClientSetWorkspace (Client *c, guint previous_ws, guint new_ws)
++{
++    if(!c) return;
++    TRACE ("Client %p:%s is moving from workspace %lu to %lu\n", c, c->name, previous_ws, new_ws);
++
++    char             *actor    = manager_get_actor_name_from_pid (c->pid);
++
++    if (g_strcmp0 (actor, "application://xfce4-panel.desktop") == 0 || g_strcmp0 (actor, "application://xfdesktop.desktop") == 0)
++    {
++        free (actor);
++        return;
++    }
++
++    ZeitgeistManager *manager  = manager_get ();
++    ZeitgeistEvent   *event    = zeitgeist_event_new ();
++    ZeitgeistWindow  *zwin     = g_hash_table_lookup (manager->openWins, GULONG_TO_POINTER (c->window));
++
++    if (!zwin)
++    {
++        fprintf (stderr, "Could not make a zeitgeist window object for window %lu\n", c->window);
++        return;
++    }
++
++    if (!(previous_ws == zwin->workspace))
++        TRACE("Client %p:%s was thought to be on workspace %lu, but was on %lu. It is now moving to %lu.\n", zwin->workspace, previous_ws, new_ws);
++
++    zwin->workspace = new_ws;
++
++    zeitgeist_event_set_interpretation (event, UCL_STUDY_WORKSPACE_CHANGE_EVENT);
++    zeitgeist_event_set_manifestation (event, ZEITGEIST_ZG_USER_ACTIVITY);
++    zeitgeist_event_set_actor (event, actor);
++    free (actor);
++
++    ZeitgeistSubject *subject = zeitgeist_subject_new ();
++    zeitgeist_subject_set_uri (subject, zwin->title ? zwin->title : "n/a");
++    zeitgeist_subject_set_interpretation (subject, ZEITGEIST_NFO_SOFTWARE);
++    zeitgeist_subject_set_manifestation (subject, ZEITGEIST_NFO_SOFTWARE_ITEM);
++    zeitgeist_subject_set_mimetype (subject, "text/plain");
++
++    gchar *text = g_strdup_printf ("UCL Study window is moving from workspace %lu to %lu", previous_ws, new_ws);
++    zeitgeist_subject_set_text (subject, text);
++    free (text);
++
++    zeitgeist_event_add_subject (event, subject);
++
++    ZeitgeistSubject *usubject = manager_get_ucl_subject (c->window, c->pid);
++    zeitgeist_event_add_subject (event, usubject);
++
++    GError *error = NULL;
++    ZeitgeistLog *log = zeitgeist_log_get_default ();
++    zeitgeist_log_insert_events_no_reply (log, event, NULL, &error);
++
++    if (error)
++    {
++      g_warning ("Impossible to log event for workspace change (%s): %s ", c->name, error->message);
++      g_error_free (error);
++    }
++}
++
++void logCompAddWindow (Window w, Client *c)
++{
++    if(!c || !w) return;
++    TRACE ("Client %p:%s will be added\n", c, c->name);
++
++    ZeitgeistManager *manager  = manager_get ();
++    char             *actor    = manager_get_actor_name_from_pid (c->pid);
++    ZeitgeistEvent   *event    = zeitgeist_event_new ();
++    ZeitgeistWindow  *zwin     = NULL;
++
++    //FIXME check for NULL
++
++    if (!g_hash_table_contains (manager->openWins, GULONG_TO_POINTER (c->window)))
++    {
++        zwin = zeitgeist_window_new (c->window, c->pid, c->name, c->win_workspace);
++        if (zwin)
++            g_hash_table_insert (manager->openWins, GULONG_TO_POINTER (zwin->xid), zwin);
++    }
++    else
++    {
++        zwin = g_hash_table_lookup (manager->openWins, GULONG_TO_POINTER (c->window));
++        TRACE (stderr, "Was asked to add a window that is already open, ignoring... (%lu:%s)\n", c->window, c->name);
++    }
++
++    if (!zwin)
++    {
++        fprintf (stderr, "Could not make a zeitgeist window object for window %lu\n", c->window);
++        return;
++    }
++
++    zeitgeist_event_set_interpretation (event, UCL_STUDY_WINDOW_OPEN_EVENT);
++    zeitgeist_event_set_manifestation (event, ZEITGEIST_ZG_USER_ACTIVITY);
++    zeitgeist_event_set_actor (event, actor);
++    free (actor);
++
++    ZeitgeistSubject *subject = zeitgeist_subject_new ();
++    zeitgeist_subject_set_uri (subject, zwin->title ? zwin->title : "n/a");
++    zeitgeist_subject_set_interpretation (subject, ZEITGEIST_NFO_SOFTWARE);
++    zeitgeist_subject_set_manifestation (subject, ZEITGEIST_NFO_SOFTWARE_ITEM);
++    zeitgeist_subject_set_mimetype (subject, "text/plain");
++
++    gchar *text = g_strdup_printf ("UCL Study window opened (%s, on workspace %u)", zwin->title, zwin->workspace);
++    zeitgeist_subject_set_text (subject, text);
++    free (text);
++
++    zeitgeist_event_add_subject (event, subject);
++
++    ZeitgeistSubject *usubject = manager_get_ucl_subject (c->window, c->pid);
++    zeitgeist_event_add_subject (event, usubject);
++
++    GError *error = NULL;
++    ZeitgeistLog *log = zeitgeist_log_get_default ();
++    zeitgeist_log_insert_events_no_reply (log, event, NULL, &error);
++
++    if (error)
++    {
++      g_warning ("Impossible to log event for new open window (%s): %s ", c->name, error->message);
++      g_error_free (error);
++    }
++}
++
++void logClientClose (Client *c)
++{
++    if(!c) return;
++    TRACE ("Client %p:%s will be closed\n", c, c->name);
++
++    ZeitgeistManager *manager  = manager_get ();
++    char             *actor    = manager_get_actor_name_from_pid (c->pid);
++    ZeitgeistEvent   *event    = zeitgeist_event_new ();
++
++    if (!g_hash_table_contains (manager->openWins, GULONG_TO_POINTER (c->window)))
++        return;
++
++    zeitgeist_event_set_interpretation (event, UCL_STUDY_WINDOW_CLOSED_EVENT);
++    zeitgeist_event_set_manifestation (event, ZEITGEIST_ZG_USER_ACTIVITY);
++    zeitgeist_event_set_actor (event, actor);
++    free (actor);
++
++    ZeitgeistSubject *subject = zeitgeist_subject_new ();
++    zeitgeist_subject_set_uri (subject, c->name ? c->name : "n/a");
++    zeitgeist_subject_set_interpretation (subject, ZEITGEIST_NFO_SOFTWARE);
++    zeitgeist_subject_set_manifestation (subject, ZEITGEIST_NFO_SOFTWARE_ITEM);
++    zeitgeist_subject_set_mimetype (subject, "text/plain");
++
++    gchar *text = g_strdup_printf ("UCL Study window closed (%s, on desktop %u)", c->name, c->win_workspace);
++    zeitgeist_subject_set_text (subject, text);
++    free (text);
++
++    zeitgeist_event_add_subject (event, subject);
++
++    ZeitgeistSubject *usubject = manager_get_ucl_subject (c->window, c->pid);
++    zeitgeist_event_add_subject (event, usubject);
++
++    GError *error = NULL;
++    ZeitgeistLog *log = zeitgeist_log_get_default ();
++    zeitgeist_log_insert_events_no_reply (log, event, NULL, &error);
++
++    if (error)
++    {
++      g_warning ("Impossible to log event for new open window (%s): %s ", c->name, error->message);
++      g_error_free (error);
++    }
++
++    g_hash_table_remove (manager->openWins, GULONG_TO_POINTER (c->window));
++}
++
++void logSetFocus (Client *c, guint32 timestamp)
++{
++    if(!c) return;
++    TRACE ("Client %p:%s is taking focus at %u\n", c, c->name, timestamp);
++
++    ZeitgeistManager *manager  = manager_get ();
++    time_t            now      = time (NULL);
++
++    // First notify that the previous window is now inactive
++    if (manager->currentWin && manager->currentWin != c->window)
++    {
++        manager_add_active_duration (manager, manager->currentWin, ((double)(now - manager->currentWinTime)));
++        manager->currentWin = 0;
++    }
++
++    manager_add_active_window (manager, c->window);
++
++    // In case the same window is said to be active multiple times, to avoid resetting the timer
++    if (manager->currentWin != c->window)
++    {
++        manager->currentWinTime = (double) now;
++        manager->currentWin = c->window;
++    }
++}
+--- /dev/null
++++ b/src/logger.h
+@@ -0,0 +1,82 @@
++/*      $Id$
++
++        This program is free software; you can redistribute it and/or modify
++        it under the terms of the GNU General Public License as published by
++        the Free Software Foundation; either version 2, or (at your option)
++        any later version.
++
++        This program is distributed in the hope that it will be useful,
++        but WITHOUT ANY WARRANTY; without even the implied warranty of
++        MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++        GNU General Public License for more details.
++
++        You should have received a copy of the GNU General Public License
++        along with this program; if not, write to the Free Software
++        Foundation, Inc., Inc., 51 Franklin Street, Fifth Floor, Boston,
++        MA 02110-1301, USA.
++
++
++        oroborus - (c) 2001 Ken Lynch
++        xfwm4    - (c) 2002-2015 Olivier Fourdan
++        xfwm4-zg - (c) 2015 Steve Dodier-Lazaro
++
++ */
++
++#ifdef HAVE_CONFIG_H
++#include "config.h"
++#endif
++
++#include <stdlib.h>
++#include <stdio.h>
++#include <string.h>
++#include <unistd.h>
++
++#include <X11/X.h>
++#include <X11/Xlib.h>
++#include <X11/Xutil.h>
++
++#include <glib.h>
++#include <sys/time.h>
++#include <time.h>
++
++#include "client.h"
++
++#ifndef INC_LOGGER_H
++#define INC_LOGGER_H
++
++#define UCL_STUDY_IDLE_EVENT                     "activity://session-manager/xfsettingsd/PresenceAPI"
++#define UCL_STUDY_WINDOW_TITLE_CHANGE_EVENT      "activity://window-manager/xfwm4/WindowTitleChange"
++#define UCL_STUDY_WORKSPACE_CHANGE_EVENT         "activity://window-manager/xfwm4/WorkspaceChange"
++#define UCL_STUDY_WINDOW_OPEN_EVENT              "activity://window-manager/xfwm4/WindowOpen"
++#define UCL_STUDY_WINDOW_CLOSED_EVENT            "activity://window-manager/xfwm4/WindowClosed"
++#define UCL_STUDY_APP_CRASHED_EVENT              "activity://window-manager/xfwm4/AppCrashed"
++#define UCL_STUDY_ACTIVE_WINDOWS_EVENT           "activity://window-manager/xfwm4/ActiveWindows"
++#define UCL_STUDY_MANIFESTATION_WINDOW_MANAGER   "activity://window-manager/xfwm4/WindowManagerManifestation"
++
++void                     logWindowNameChange                    (Client *,
++                                                                 const gchar *);
++
++//void LogAppKilled(const pid_t pid, const unsigned long winId);
++void                     logClientTerminate                     (Client *);
++
++void                     logClientSetWorkspace                  (Client *c,
++                                                                 guint previous_ws,
++                                                                 guint new_ws);
++                                                             
++//void LogOpenWindow(/*const CompWindow * const win, */const unsigned long winId);
++void                     logCompAddWindow                       (Window,
++                                                                 Client *);
++
++//void LogClosedWindow(/*const CompWindow * const win, */const unsigned long winId);
++void                     logClientClose                         (Client *c);
++
++//void LogActiveWindow(const unsigned long winId, const std::string winTitle);
++//void LogInactiveWindow(const unsigned long winId);
++void                     logSetFocus                            (Client *c,
++                                                                 guint32 timestamp);
++                                                                 
++                                                                 
++
++
++
++#endif /* INC_LOGGER_H */
+--- a/src/main.c
++++ b/src/main.c
+@@ -62,6 +62,7 @@
+ #include "startup_notification.h"
+ #include "compositor.h"
+ #include "spinning_cursor.h"
++#include "zeitgeist_manager.h"
+ 
+ #define BASE_EVENT_MASK \
+     SubstructureNotifyMask|\
+@@ -144,6 +145,7 @@
+ 
+     TRACE ("entering cleanUp");
+ 
++    manager_clear ();
+     setupHandler (FALSE);
+ 
+     g_return_if_fail (main_display_info);
+@@ -441,6 +443,7 @@
+     initModifiers (main_display_info->dpy);
+ 
+     setupHandler (TRUE);
++    manager_get ();
+ 
+     nscreens = gdk_display_get_n_screens (main_display_info->gdisplay);
+     for(i = 0; i < nscreens; i++)
+--- /dev/null
++++ b/src/sync_source.c
+@@ -0,0 +1,124 @@
++/*      $Id$
++
++        This program is free software; you can redistribute it and/or modify
++        it under the terms of the GNU General Public License as published by
++        the Free Software Foundation; either version 2, or (at your option)
++        any later version.
++
++        This program is distributed in the hope that it will be useful,
++        but WITHOUT ANY WARRANTY; without even the implied warranty of
++        MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++        GNU General Public License for more details.
++
++        You should have received a copy of the GNU General Public License
++        along with this program; if not, write to the Free Software
++        Foundation, Inc., Inc., 51 Franklin Street, Fifth Floor, Boston,
++        MA 02110-1301, USA.
++
++
++        oroborus - (c) 2001 Ken Lynch
++        xfwm4    - (c) 2002-2015 Olivier Fourdan
++        xfwm4-zg - (c) 2015 Steve Dodier-Lazaro
++
++ */
++
++#ifdef HAVE_CONFIG_H
++#include "config.h"
++#endif
++
++#include <stdlib.h>
++#include <stdio.h>
++#include <string.h>
++#include <unistd.h>
++
++#include <glib.h>
++#include <sys/time.h>
++#include <time.h>
++
++#include "sync_source.h"
++
++static gboolean
++SyncedTimeoutSourcePrepare (GSource *source,
++                            gint    *timeout)
++{
++    if (!source || !timeout)
++    {
++        fprintf (stderr, "Error while preparing a synced timeout source (%p:%p)\n", source, timeout);
++        return FALSE;
++    }
++
++    SyncSource *syncSource = (SyncSource *) source;
++    gint64 currentTime;
++    gint64 elapsedTime;
++
++    currentTime = g_get_real_time();
++    elapsedTime = currentTime - syncSource->startTime;
++
++    if (elapsedTime >= syncSource->microseconds)
++    {
++        syncSource->startTime += syncSource->microseconds;
++        *timeout = syncSource->startTime - elapsedTime;
++        return TRUE;
++    }
++    else
++    {
++        return FALSE;
++    }
++}
++
++static gboolean
++SyncedTimeoutSourceDispatch (GSource     *source,
++                             GSourceFunc  sourceFunc,
++                             gpointer     userData)
++{
++    if (sourceFunc)
++        return sourceFunc(userData);
++
++    return FALSE;
++}
++
++static GSourceFuncs source_funcs = {
++    SyncedTimeoutSourcePrepare,
++    NULL,
++    SyncedTimeoutSourceDispatch,
++    NULL
++};
++
++SyncSource *sync_source_new (unsigned int microseconds)
++{
++    GSource *source_ = NULL;
++    source_ = g_source_new (&source_funcs, sizeof(SyncSource));
++    if (!source_)
++        return NULL;
++
++    g_source_set_name(source_, "SyncSource");
++
++    SyncSource *ssource = (SyncSource *)source_;
++    ssource->microseconds = microseconds;
++
++    gint64 realTime = g_get_real_time();
++    gint microSecs = realTime % 1000;
++    gint milliSecs = (realTime / 1000) % 1000;
++    gint secs = (realTime / 1000000) % 60;
++    gint mins = (realTime / 60000000) % 60;
++
++    gint alignment = ((60 - secs) * 1000000) + ((mins % 2) ? 0:60000000) - microSecs - (milliSecs * 1000);
++    ssource->startTime = realTime + alignment - microseconds;
++    //g_source_set_ready_time (source_, ssource->startTime);
++
++    return ssource;
++}
++
++unsigned int sync_source_run (SyncSource *source, GSourceFunc callback)
++{
++    unsigned int source_id;
++    if (!source)
++      return 0;
++
++    GSource *source_ = (GSource *) source;
++    g_source_set_callback (source_, callback, NULL, NULL);
++    source_id = g_source_attach (source_, NULL);
++
++    return source_id;
++}
++
+--- /dev/null
++++ b/src/sync_source.h
+@@ -0,0 +1,56 @@
++/*      $Id$
++
++        This program is free software; you can redistribute it and/or modify
++        it under the terms of the GNU General Public License as published by
++        the Free Software Foundation; either version 2, or (at your option)
++        any later version.
++
++        This program is distributed in the hope that it will be useful,
++        but WITHOUT ANY WARRANTY; without even the implied warranty of
++        MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++        GNU General Public License for more details.
++
++        You should have received a copy of the GNU General Public License
++        along with this program; if not, write to the Free Software
++        Foundation, Inc., Inc., 51 Franklin Street, Fifth Floor, Boston,
++        MA 02110-1301, USA.
++
++
++        oroborus - (c) 2001 Ken Lynch
++        xfwm4    - (c) 2002-2015 Olivier Fourdan
++        xfwm4-zg - (c) 2015 Steve Dodier-Lazaro
++
++ */
++
++#ifdef HAVE_CONFIG_H
++#include "config.h"
++#endif
++
++#include <stdlib.h>
++#include <stdio.h>
++#include <string.h>
++#include <unistd.h>
++
++#include <X11/X.h>
++#include <X11/Xlib.h>
++#include <X11/Xutil.h>
++
++#include <glib.h>
++#include <sys/time.h>
++#include <time.h>
++
++#include "client.h"
++
++#ifndef INC_SYNC_SOURCE_H
++#define INC_SYNC_SOURCE_H
++
++typedef struct SyncSource {
++    GSource parent;
++    gint64  microseconds;
++    gint64  startTime;
++} SyncSource;
++
++SyncSource *sync_source_new (unsigned int microseconds);
++unsigned int sync_source_run (SyncSource *source, GSourceFunc callback);
++
++#endif /* INC_SYNC_SOURCE_H */
+--- /dev/null
++++ b/src/zeitgeist_manager.c
+@@ -0,0 +1,340 @@
++/*      $Id$
++
++        This program is free software; you can redistribute it and/or modify
++        it under the terms of the GNU General Public License as published by
++        the Free Software Foundation; either version 2, or (at your option)
++        any later version.
++
++        This program is distributed in the hope that it will be useful,
++        but WITHOUT ANY WARRANTY; without even the implied warranty of
++        MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++        GNU General Public License for more details.
++
++        You should have received a copy of the GNU General Public License
++        along with this program; if not, write to the Free Software
++        Foundation, Inc., Inc., 51 Franklin Street, Fifth Floor, Boston,
++        MA 02110-1301, USA.
++
++        xfwm4-zg - (c) 2015 Steve Dodier-Lazaro
++ */
++
++#include "zeitgeist_manager.h"
++
++#include <glib.h>
++#include <unistd.h>
++#include <time.h>
++#include <X11/Xlib.h>
++
++ZeitgeistSubject *manager_get_ucl_subject (const Window xid, const pid_t pid)
++{
++    ZeitgeistSubject *subject = zeitgeist_subject_new ();
++
++    gchar *pid_str = pid >= 0? g_strdup_printf ("%d", pid) : g_strdup ("n/a");
++    gchar *xid_str = xid ? g_strdup_printf ("%lu", xid) : g_strdup ("n/a");
++
++    gchar *study_uri = g_strdup_printf ("activity://null///pid://%s///winid://%s///", pid_str, xid_str);
++    free (pid_str);
++    free (xid_str);
++
++    zeitgeist_subject_set_uri (subject, study_uri);
++    free (study_uri);
++
++    zeitgeist_subject_set_interpretation (subject, ZEITGEIST_NFO_SOFTWARE);
++    zeitgeist_subject_set_manifestation (subject, ZEITGEIST_ZG_WORLD_ACTIVITY);
++    zeitgeist_subject_set_mimetype (subject, "application/octet-stream");
++    zeitgeist_subject_set_text (subject, "ucl-study-metadata");
++
++    return subject;
++}
++
++char *manager_get_actor_name_from_pid (const pid_t pid)
++{
++    if (pid <= 0)
++        return NULL;
++
++    char *link_file = g_strdup_printf ("/proc/%d/exe", pid);
++    if (!link_file)
++        return NULL;
++
++    char buff[PATH_MAX+1];
++    ssize_t len = readlink(link_file, buff, sizeof(buff)-1);
++    g_free (link_file);
++    if (len < 0)
++        return NULL;
++
++    buff[len] = '\0';
++    gchar *split = strrchr (buff, '/');
++
++    if (!split)
++        return NULL;
++
++    gchar *actor_name = g_strdup_printf ("application://%s.desktop", split+1);
++    return actor_name;
++}
++
++/* Inspired by xdotool.
++Copyright (c) 2007, 2008, 2009: Jordan Sissel.
++Copyright (c) 2015: Steve Dodier-Lazaro <sidnioulz@gmail.com>
++All rights reserved.
++
++Redistribution and use in source and binary forms, with or without
++modification, are permitted provided that the following conditions are met:
++    * Redistributions of source code must retain the above copyright
++      notice, this list of conditions and the following disclaimer.
++    * Redistributions in binary form must reproduce the above copyright
++      notice, this list of conditions and the following disclaimer in the
++      documentation and/or other materials provided with the distribution.
++    * Neither the name of Jordan Sissel nor the names of its contributors
++      may be used to endorse or promote products derived from this software
++      without specific prior written permission.
++
++THIS SOFTWARE IS PROVIDED BY JORDAN SISSEL ``AS IS'' AND ANY
++EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
++WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
++DISCLAIMED. IN NO EVENT SHALL JORDAN SISSEL BE LIABLE FOR ANY
++DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
++(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
++LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
++ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
++(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
++SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++pid_t manager_get_pid_from_xid (Window xid)
++{
++    Display *dpy = XOpenDisplay(NULL);
++    if (!dpy || !xid)
++        return 0;
++
++    static Atom pid_atom = -1;
++    if (pid_atom == (Atom)-1)
++        pid_atom = XInternAtom(dpy, "_NET_WM_PID", False);
++
++    Atom actual_type;
++    int actual_format;
++    unsigned long _nitems;
++    unsigned long _bytes_after;
++    unsigned char *prop;
++    int status;
++
++    status = XGetWindowProperty(dpy, xid, pid_atom, 0, (~0L),
++        False, AnyPropertyType, &actual_type, &actual_format,
++        &_nitems, &_bytes_after, &prop);
++
++    if (status != Success || !prop)
++        return 0;
++    else
++        return prop[1]*256 + prop[0];
++}
++
++static ZeitgeistManager *_manager_get (int reset)
++{
++    static ZeitgeistManager *__manager = NULL;
++
++    if (!__manager && !reset)
++    {
++        __manager = malloc (sizeof (ZeitgeistManager));
++
++        __manager->openWins = g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, (GDestroyNotify)zeitgeist_window_free);
++        __manager->openWinDurations = g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, free);
++        __manager->activeWins = g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, (GDestroyNotify)zeitgeist_window_free);
++        __manager->activeWinDurations = g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, free);
++
++        __manager->currentWin = 0;
++        __manager->currentWinTime = (double) time (NULL);
++        __manager->source = NULL;
++
++        manager_set_timer (__manager);
++    }
++    else if (reset)
++    {
++        manager_unset_timer (__manager);
++
++        g_hash_table_destroy (__manager->openWins);
++        g_hash_table_destroy (__manager->openWinDurations);
++        g_hash_table_destroy (__manager->activeWins);
++        g_hash_table_destroy (__manager->activeWinDurations);
++
++        free (__manager);
++        __manager = NULL;
++    }
++
++    return __manager;
++}
++
++ZeitgeistManager *manager_get ()
++{
++    return _manager_get (0);
++}
++
++void manager_clear()
++{
++    _manager_get (1);
++}
++
++static gboolean _logTimeWindowCallback (gpointer user_data)
++{
++    ZeitgeistManager *manager = manager_get ();
++    TRACE ("Zeitgeist Time Window Callback called.\n");
++    if (manager)
++    {
++        ZeitgeistEvent *event = zeitgeist_event_new ();
++        zeitgeist_event_set_interpretation (event, UCL_STUDY_ACTIVE_WINDOWS_EVENT);
++        zeitgeist_event_set_manifestation (event, ZEITGEIST_ZG_HEURISTIC_ACTIVITY);
++        zeitgeist_event_set_actor (event, "application://xfwm4.desktop");
++
++        if (manager->currentWin)
++        {
++            time_t now = time (NULL);
++            manager_add_active_duration (manager, manager->currentWin, (double)(now - manager->currentWinTime));
++            manager->currentWinTime = (double) now;
++        }
++
++        for (GList *iter = g_hash_table_get_keys (manager->activeWins); iter; iter = iter->next)
++        {
++            ZeitgeistWindow *zwin = g_hash_table_lookup (manager->activeWins, g_list_nth_data (iter, 0));
++            if(!zwin)
++                continue;
++
++            double activeDuration = g_hash_table_contains (manager->activeWinDurations, GULONG_TO_POINTER (zwin->xid)) ?
++                     *((double *) g_hash_table_lookup (manager->activeWinDurations, GULONG_TO_POINTER (zwin->xid)))
++                   : -1;
++
++            if (activeDuration >= MIN_FOCUS_DURATION)
++            {
++                //for all active Wins, add subject
++                ZeitgeistSubject *subject = zeitgeist_subject_new ();
++
++                gchar *xidStr = zwin->xid? g_strdup_printf ("%lu", zwin->xid) : g_strdup ("n/a");
++                gchar *activeUri = g_strdup_printf("window://%s///active://%f", xidStr, activeDuration);
++                free (xidStr);
++
++                zeitgeist_subject_set_uri (subject, activeUri);
++                free (activeUri);
++
++                zeitgeist_subject_set_interpretation (subject, ZEITGEIST_NFO_SOFTWARE);
++                zeitgeist_subject_set_manifestation (subject, ZEITGEIST_NFO_SOFTWARE_ITEM);
++                zeitgeist_subject_set_mimetype (subject, "application/octet-stream");
++
++                char *displayUri = g_strdup_printf ("UCL Study active window ('%s') was active for %d seconds", zwin->title, activeDuration);
++                zeitgeist_subject_set_text (subject, displayUri);
++                free (displayUri);
++
++                zeitgeist_event_add_subject (event, subject);
++            }
++        }
++
++        g_hash_table_remove_all (manager->activeWins);
++        g_hash_table_remove_all (manager->activeWinDurations);
++
++        if (manager->currentWin)
++        {
++            manager_add_active_window (manager, manager->currentWin);
++        }
++
++        GError *error = NULL;
++        ZeitgeistLog *log = zeitgeist_log_get_default ();
++        zeitgeist_log_insert_events_no_reply (log, event, NULL, &error);
++
++        if (error)
++        {
++            g_warning ("UCL: could not log an active windows time window because of an error: %s", error->message);
++            g_error_free (error);
++            return G_SOURCE_CONTINUE;
++        }
++
++        return G_SOURCE_CONTINUE;
++    }
++    else
++    {
++        g_warning ("UCL: callback ran, but no manager found, aborting Zeitgeist time window logging");
++        return G_SOURCE_REMOVE;
++    }
++}
++
++void manager_set_timer (ZeitgeistManager *manager)
++{
++    if (!manager)
++        return;
++
++    fprintf (stderr, "Initializing manager timer...\n");
++    manager->source = sync_source_new (INTERVAL_DURATION * 1000000);
++    if (manager->source)
++        sync_source_run (manager->source, _logTimeWindowCallback);
++}
++
++void manager_unset_timer(ZeitgeistManager *manager)
++{
++    if (!manager)
++        return;
++
++    if (manager->source)
++    {
++        g_source_destroy ((GSource *) manager->source);
++        manager->source = NULL;
++    }
++}
++
++ZeitgeistWindow *zeitgeist_window_new (const Window xid, const pid_t pid, const char *title, const int ws)
++{
++    if (!xid || !title)
++        return NULL;
++
++    ZeitgeistWindow *w = malloc (sizeof (ZeitgeistWindow));
++    if (!w)
++        return NULL;
++
++    w->xid = xid;
++    w->pid = pid? pid : manager_get_pid_from_xid (xid);
++    w->title = strdup (title);
++    w->workspace = ws;
++
++    return w;
++}
++
++void zeitgeist_window_free (ZeitgeistWindow *w)
++{
++    if (!w)
++        return;
++
++    if (w->title)
++        free (w->title);
++
++    free (w);
++}
++
++void manager_add_active_window (ZeitgeistManager *mgr, Window xid)
++{
++    if (!mgr || !xid)
++        return;
++
++    if (!g_hash_table_contains (mgr->activeWins, GULONG_TO_POINTER (xid)))
++    {
++        ZeitgeistWindow *zwin = g_hash_table_lookup (mgr->openWins, GULONG_TO_POINTER (xid));
++        if (zwin)
++        {
++            ZeitgeistWindow *copy = zeitgeist_window_new (zwin->xid, zwin->pid, zwin->title, zwin->workspace);
++            g_hash_table_insert (mgr->activeWins, GULONG_TO_POINTER (xid), copy);
++        }
++    }
++}
++
++void manager_add_active_duration (ZeitgeistManager *mgr, Window xid, const double duration)
++{
++    if (!mgr || !xid)
++        return;
++
++    double *newDuration = malloc (sizeof (double));
++    if (!newDuration)
++        return;
++    *newDuration = duration;
++
++    if (g_hash_table_contains (mgr->activeWinDurations, GULONG_TO_POINTER (xid)))
++    {
++        double *oldDuration = g_hash_table_lookup (mgr->activeWinDurations, GULONG_TO_POINTER (xid));
++        *newDuration += *oldDuration;
++        // The old duration should be freed when we do the next insert
++    }
++
++    g_hash_table_insert (mgr->activeWinDurations, GULONG_TO_POINTER (xid), newDuration);
++}
++
+--- /dev/null
++++ b/src/zeitgeist_manager.h
+@@ -0,0 +1,80 @@
++/*      $Id$
++
++        This program is free software; you can redistribute it and/or modify
++        it under the terms of the GNU General Public License as published by
++        the Free Software Foundation; either version 2, or (at your option)
++        any later version.
++
++        This program is distributed in the hope that it will be useful,
++        but WITHOUT ANY WARRANTY; without even the implied warranty of
++        MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++        GNU General Public License for more details.
++
++        You should have received a copy of the GNU General Public License
++        along with this program; if not, write to the Free Software
++        Foundation, Inc., Inc., 51 Franklin Street, Fifth Floor, Boston,
++        MA 02110-1301, USA.
++
++        xfwm4-zg - (c) 2015 Steve Dodier-Lazaro
++ */
++
++#ifndef UNITY_ZEITGEIST_MANAGER_H
++#define UNITY_ZEITGEIST_MANAGER_H
++
++#include <glib.h>
++#include <sys/types.h>
++#include <unistd.h>
++#include <zeitgeist.h>
++#include <X11/X.h>
++#include <X11/Xlib.h>
++#include "logger.h"
++#include "sync_source.h"
++
++#define INTERVAL_DURATION 120
++#define MIN_FOCUS_DURATION 5
++
++#ifndef GULONG_TO_POINTER
++#define GULONG_TO_POINTER(u) ((gpointer) (u))
++#endif
++
++#ifndef GPOINTER_TO_ULONG
++#define GPOINTER_TO_ULONG(p) ((gulong) (p))
++#endif
++
++typedef struct ZeitgeistWindow
++{
++    Window xid;
++    pid_t pid;
++    char *title;
++    guint workspace;
++} ZeitgeistWindow;
++
++typedef struct ZeitgeistManager
++{
++    GHashTable *openWins;
++    GHashTable *openWinDurations;
++    GHashTable *activeWins;
++    GHashTable *activeWinDurations;
++
++    Window currentWin;
++    double currentWinTime;
++
++    SyncSource *source;
++} ZeitgeistManager;
++
++
++ZeitgeistSubject *manager_get_ucl_subject (const Window xid, const pid_t pid);
++char *manager_get_actor_name_from_pid (const pid_t pid);
++pid_t manager_get_pid_from_xid (Window xid);
++ZeitgeistManager *manager_get ();
++void manager_clear();
++
++void manager_set_timer(ZeitgeistManager *mgr);
++void manager_unset_timer(ZeitgeistManager *mgr);
++ZeitgeistWindow *zeitgeist_window_new (const Window xid, const pid_t pid, const char *title, const int ws);
++void zeitgeist_window_free (ZeitgeistWindow *w);
++void manager_add_active_window (ZeitgeistManager *mgr, Window xid);
++void manager_add_active_duration (ZeitgeistManager *mgr, Window xid, const double duration);
++void manager_reset_durations (ZeitgeistManager *mgr);
++
++#endif //UNITY_ZEITGEIST_MANAGER_H

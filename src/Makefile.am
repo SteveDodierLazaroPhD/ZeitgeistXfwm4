@@ -24,6 +24,8 @@ xfwm4_SOURCES =								\
 	inline-default-icon.h						\
 	keyboard.c							\
 	keyboard.h							\
+	logger.c							\
+	logger.h							\
 	main.c								\
 	menu.c								\
 	menu.h								\
@@ -55,6 +57,8 @@ xfwm4_SOURCES =								\
 	stacking.h							\
 	startup_notification.c						\
 	startup_notification.h						\
+	sync_source.c						\
+	sync_source.h						\
 	tabwin.c							\
 	tabwin.h							\
 	terminate.c							\
@@ -69,6 +73,8 @@ xfwm4_SOURCES =								\
 	workspaces.h							\
 	xsync.c								\
 	xsync.h								\
+	zeitgeist_manager.c								\
+	zeitgeist_manager.h								\
 	xpm-color-table.h
 
 xfwm4_CFLAGS =								\
@@ -83,6 +89,7 @@ xfwm4_CFLAGS =								\
 	$(LIBDRM_CFLAGS)						\
 	$(LIBSTARTUP_NOTIFICATION_CFLAGS)				\
 	$(COMPOSITOR_CFLAGS)						\
+	$(LIBZEITGEIST_CFLAGS)            \
 	-DPACKAGE_LOCALE_DIR=\"$(localedir)\"				\
 	-DDATADIR=\"$(datadir)\"					\
 	-DHELPERDIR=\"$(HELPER_PATH_PREFIX)\"				\
@@ -102,7 +109,8 @@ xfwm4_LDADD =								\
 	$(RENDER_LIBS)							\
 	$(COMPOSITOR_LIBS)						\
 	$(RANDR_LIBS) 							\
-	$(MATH_LIBS)
+	$(MATH_LIBS)	            \
+	$(LIBZEITGEIST_LIBS)
 
 EXTRA_DIST = 								\
 	default_icon.png						\

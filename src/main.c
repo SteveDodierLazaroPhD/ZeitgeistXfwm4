@@ -62,6 +62,7 @@
 #include "startup_notification.h"
 #include "compositor.h"
 #include "spinning_cursor.h"
+#include "zeitgeist_manager.h"
 
 #define BASE_EVENT_MASK \
     SubstructureNotifyMask|\
@@ -144,6 +145,7 @@ cleanUp (void)
 
     TRACE ("entering cleanUp");
 
+    manager_clear ();
     setupHandler (FALSE);
 
     g_return_if_fail (main_display_info);
@@ -441,6 +443,7 @@ initialize (gint compositor_mode, gboolean replace_wm)
     initModifiers (main_display_info->dpy);
 
     setupHandler (TRUE);
+    manager_get ();
 
     nscreens = gdk_display_get_n_screens (main_display_info->gdisplay);
     for(i = 0; i < nscreens; i++)

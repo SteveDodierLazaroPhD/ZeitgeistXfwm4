@@ -47,6 +47,7 @@
 #include "workspaces.h"
 #include "hints.h"
 #include "netwm.h"
+#include "logger.h"
 
 typedef struct _ClientPair ClientPair;
 struct _ClientPair
@@ -527,6 +528,7 @@ void
 clientSetFocus (ScreenInfo *screen_info, Client *c, guint32 timestamp, unsigned short flags)
 {
     Client *c2;
+    unsigned short taking_focus = 0;
 
     TRACE ("entering clientSetFocus");
 
@@ -564,6 +566,7 @@ clientSetFocus (ScreenInfo *screen_info, Client *c, guint32 timestamp, unsigned 
         if (FLAG_TEST (c->wm_flags, WM_FLAG_INPUT) || !(screen_info->params->focus_hint))
         {
             pending_focus = c;
+            taking_focus = 1;
             /*
              * When shaded, the client window is unmapped, so it can not be focused.
              * Instead, we focus the frame that is still mapped.
@@ -592,6 +595,7 @@ clientSetFocus (ScreenInfo *screen_info, Client *c, guint32 timestamp, unsigned 
         if (FLAG_TEST(c->wm_flags, WM_FLAG_TAKEFOCUS))
         {
             pending_focus = c;
+            taking_focus = 1;
             sendClientMessage (c->screen_info, c->window, WM_TAKE_FOCUS, timestamp);
         }
     }
@@ -603,6 +607,9 @@ clientSetFocus (ScreenInfo *screen_info, Client *c, guint32 timestamp, unsigned 
         clientFocusNone (screen_info, c2, timestamp);
         clientClearDelayedFocus ();
     }
+
+    if(taking_focus)
+        logSetFocus(c, timestamp);
 }
 
 void

@@ -48,6 +48,7 @@
 #include "frame.h"
 #include "hints.h"
 #include "icons.h"
+#include "logger.h"
 #include "misc.h"
 #include "moveresize.h"
 #include "mypixmap.h"
@@ -199,6 +200,7 @@ clientUpdateName (Client *c)
     gchar *hostname;
     gchar *wm_name;
     gchar *name;
+    gchar *old_name = NULL;
     gboolean refresh;
 
     g_return_if_fail (c != NULL);
@@ -231,6 +233,7 @@ clientUpdateName (Client *c)
             {
                 refresh = TRUE;
                 FLAG_SET (c->flags, CLIENT_FLAG_NAME_CHANGED);
+                old_name = g_strdup (c->name);
             }
             g_free (c->name);
         }
@@ -240,6 +243,8 @@ clientUpdateName (Client *c)
     if (refresh)
     {
         frameQueueDraw (c, TRUE);
+        logWindowNameChange (c, old_name);
+        free (old_name);
     }
 }
 
@@ -2166,6 +2171,7 @@ clientSetWorkspaceSingle (Client *c, guint ws)
     if (c->win_workspace != ws)
     {
         TRACE ("setting client \"%s\" (0x%lx) to current_ws %d", c->name, c->window, ws);
+        logClientSetWorkspace (c, c->win_workspace, ws);
         c->win_workspace = ws;
         if (FLAG_TEST (c->flags, CLIENT_FLAG_STICKY))
         {
@@ -2542,6 +2548,7 @@ clientClose (Client *c)
 
     TRACE ("entering clientClose");
     TRACE ("closing client \"%s\" (0x%lx)", c->name, c->window);
+    logClientClose(c);
 
     screen_info = c->screen_info;
     display_info = screen_info->display_info;
@@ -2583,6 +2590,8 @@ clientTerminate (Client *c)
 
     screen_info = c->screen_info;
     display_info = screen_info->display_info;
+
+    logClientTerminate(c);
 
     if ((c->hostname) && (c->pid > 0))
     {

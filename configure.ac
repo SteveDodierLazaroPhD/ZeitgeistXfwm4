@@ -94,6 +94,7 @@ XDT_CHECK_PACKAGE([LIBXFCONF], libxfconf-0, [xfconf_minimum_version])
 XDT_CHECK_PACKAGE([LIBWNCK], [libwnck-1.0], [wnck_minimum_version])
 XDT_CHECK_PACKAGE([DBUS], [dbus-1], [1.0.0])
 XDT_CHECK_PACKAGE([DBUS_GLIB], [dbus-glib-1], [0.72])
+XDT_CHECK_PACKAGE([LIBZEITGEIST], [zeitgeist-1.0], [0.3])
 
 dnl
 dnl Sync to vblank support
