@@ -1,6 +1,8 @@
---- a/configure.ac
-+++ b/configure.ac
-@@ -94,6 +94,7 @@
+Index: xfwm4-4.11.1-2ubuntu2/configure.ac
+===================================================================
+--- xfwm4-4.11.1-2ubuntu2.orig/configure.ac
++++ xfwm4-4.11.1-2ubuntu2/configure.ac
+@@ -94,6 +94,7 @@ XDT_CHECK_PACKAGE([LIBXFCONF], libxfconf
  XDT_CHECK_PACKAGE([LIBWNCK], [libwnck-1.0], [wnck_minimum_version])
  XDT_CHECK_PACKAGE([DBUS], [dbus-1], [1.0.0])
  XDT_CHECK_PACKAGE([DBUS_GLIB], [dbus-glib-1], [0.72])
@@ -8,9 +10,11 @@
  
  dnl
  dnl Sync to vblank support
---- a/src/Makefile.am
-+++ b/src/Makefile.am
-@@ -24,6 +24,8 @@
+Index: xfwm4-4.11.1-2ubuntu2/src/Makefile.am
+===================================================================
+--- xfwm4-4.11.1-2ubuntu2.orig/src/Makefile.am
++++ xfwm4-4.11.1-2ubuntu2/src/Makefile.am
+@@ -24,6 +24,8 @@ xfwm4_SOURCES =								\
  	inline-default-icon.h						\
  	keyboard.c							\
  	keyboard.h							\
@@ -19,7 +23,7 @@
  	main.c								\
  	menu.c								\
  	menu.h								\
-@@ -55,6 +57,8 @@
+@@ -55,6 +57,8 @@ xfwm4_SOURCES =								\
  	stacking.h							\
  	startup_notification.c						\
  	startup_notification.h						\
@@ -28,7 +32,7 @@
  	tabwin.c							\
  	tabwin.h							\
  	terminate.c							\
-@@ -69,6 +73,8 @@
+@@ -69,6 +73,8 @@ xfwm4_SOURCES =								\
  	workspaces.h							\
  	xsync.c								\
  	xsync.h								\
@@ -37,7 +41,7 @@
  	xpm-color-table.h
  
  xfwm4_CFLAGS =								\
-@@ -83,6 +89,7 @@
+@@ -83,6 +89,7 @@ xfwm4_CFLAGS =								\
  	$(LIBDRM_CFLAGS)						\
  	$(LIBSTARTUP_NOTIFICATION_CFLAGS)				\
  	$(COMPOSITOR_CFLAGS)						\
@@ -45,7 +49,7 @@
  	-DPACKAGE_LOCALE_DIR=\"$(localedir)\"				\
  	-DDATADIR=\"$(datadir)\"					\
  	-DHELPERDIR=\"$(HELPER_PATH_PREFIX)\"				\
-@@ -102,7 +109,8 @@
+@@ -102,7 +109,8 @@ xfwm4_LDADD =								\
  	$(RENDER_LIBS)							\
  	$(COMPOSITOR_LIBS)						\
  	$(RANDR_LIBS) 							\
@@ -55,8 +59,10 @@
  
  EXTRA_DIST = 								\
  	default_icon.png						\
---- a/src/client.c
-+++ b/src/client.c
+Index: xfwm4-4.11.1-2ubuntu2/src/client.c
+===================================================================
+--- xfwm4-4.11.1-2ubuntu2.orig/src/client.c
++++ xfwm4-4.11.1-2ubuntu2/src/client.c
 @@ -48,6 +48,7 @@
  #include "frame.h"
  #include "hints.h"
@@ -65,7 +71,7 @@
  #include "misc.h"
  #include "moveresize.h"
  #include "mypixmap.h"
-@@ -199,6 +200,7 @@
+@@ -199,6 +200,7 @@ clientUpdateName (Client *c)
      gchar *hostname;
      gchar *wm_name;
      gchar *name;
@@ -73,7 +79,7 @@
      gboolean refresh;
  
      g_return_if_fail (c != NULL);
-@@ -231,6 +233,7 @@
+@@ -231,6 +233,7 @@ clientUpdateName (Client *c)
              {
                  refresh = TRUE;
                  FLAG_SET (c->flags, CLIENT_FLAG_NAME_CHANGED);
@@ -81,7 +87,7 @@
              }
              g_free (c->name);
          }
-@@ -240,6 +243,8 @@
+@@ -240,6 +243,8 @@ clientUpdateName (Client *c)
      if (refresh)
      {
          frameQueueDraw (c, TRUE);
@@ -90,7 +96,7 @@
      }
  }
  
-@@ -2166,6 +2171,7 @@
+@@ -2166,6 +2171,7 @@ clientSetWorkspaceSingle (Client *c, gui
      if (c->win_workspace != ws)
      {
          TRACE ("setting client \"%s\" (0x%lx) to current_ws %d", c->name, c->window, ws);
@@ -98,7 +104,7 @@
          c->win_workspace = ws;
          if (FLAG_TEST (c->flags, CLIENT_FLAG_STICKY))
          {
-@@ -2542,6 +2548,7 @@
+@@ -2542,6 +2548,7 @@ clientClose (Client *c)
  
      TRACE ("entering clientClose");
      TRACE ("closing client \"%s\" (0x%lx)", c->name, c->window);
@@ -106,7 +112,7 @@
  
      screen_info = c->screen_info;
      display_info = screen_info->display_info;
-@@ -2584,6 +2591,8 @@
+@@ -2584,6 +2591,8 @@ clientTerminate (Client *c)
      screen_info = c->screen_info;
      display_info = screen_info->display_info;
  
@@ -115,8 +121,10 @@
      if ((c->hostname) && (c->pid > 0))
      {
          if (!strcmp (display_info->hostname, c->hostname))
---- a/src/compositor.c
-+++ b/src/compositor.c
+Index: xfwm4-4.11.1-2ubuntu2/src/compositor.c
+===================================================================
+--- xfwm4-4.11.1-2ubuntu2.orig/src/compositor.c
++++ xfwm4-4.11.1-2ubuntu2/src/compositor.c
 @@ -49,6 +49,7 @@
  #include "client.h"
  #include "frame.h"
@@ -125,7 +133,7 @@
  #include "compositor.h"
  
  #ifdef HAVE_COMPOSITOR
-@@ -2867,6 +2868,7 @@
+@@ -2867,6 +2868,7 @@ compositorAddWindow (DisplayInfo *displa
  
      if (!compositorSetClient (display_info, id, c))
      {
@@ -133,8 +141,10 @@
          add_win (display_info, id, c);
      }
  #endif /* HAVE_COMPOSITOR */
---- a/src/focus.c
-+++ b/src/focus.c
+Index: xfwm4-4.11.1-2ubuntu2/src/focus.c
+===================================================================
+--- xfwm4-4.11.1-2ubuntu2.orig/src/focus.c
++++ xfwm4-4.11.1-2ubuntu2/src/focus.c
 @@ -47,6 +47,7 @@
  #include "workspaces.h"
  #include "hints.h"
@@ -143,7 +153,7 @@
  
  typedef struct _ClientPair ClientPair;
  struct _ClientPair
-@@ -527,6 +528,7 @@
+@@ -527,6 +528,7 @@ void
  clientSetFocus (ScreenInfo *screen_info, Client *c, guint32 timestamp, unsigned short flags)
  {
      Client *c2;
@@ -151,7 +161,7 @@
  
      TRACE ("entering clientSetFocus");
  
-@@ -564,6 +566,7 @@
+@@ -564,6 +566,7 @@ clientSetFocus (ScreenInfo *screen_info,
          if (FLAG_TEST (c->wm_flags, WM_FLAG_INPUT) || !(screen_info->params->focus_hint))
          {
              pending_focus = c;
@@ -159,7 +169,7 @@
              /*
               * When shaded, the client window is unmapped, so it can not be focused.
               * Instead, we focus the frame that is still mapped.
-@@ -592,6 +595,7 @@
+@@ -592,6 +595,7 @@ clientSetFocus (ScreenInfo *screen_info,
          if (FLAG_TEST(c->wm_flags, WM_FLAG_TAKEFOCUS))
          {
              pending_focus = c;
@@ -167,7 +177,7 @@
              sendClientMessage (c->screen_info, c->window, WM_TAKE_FOCUS, timestamp);
          }
      }
-@@ -603,6 +607,9 @@
+@@ -603,6 +607,9 @@ clientSetFocus (ScreenInfo *screen_info,
          clientFocusNone (screen_info, c2, timestamp);
          clientClearDelayedFocus ();
      }
@@ -177,8 +187,10 @@
  }
  
  void
+Index: xfwm4-4.11.1-2ubuntu2/src/logger.c
+===================================================================
 --- /dev/null
-+++ b/src/logger.c
++++ xfwm4-4.11.1-2ubuntu2/src/logger.c
 @@ -0,0 +1,315 @@
 +/*      $Id$
 +
@@ -495,8 +507,10 @@
 +        manager->currentWin = c->window;
 +    }
 +}
+Index: xfwm4-4.11.1-2ubuntu2/src/logger.h
+===================================================================
 --- /dev/null
-+++ b/src/logger.h
++++ xfwm4-4.11.1-2ubuntu2/src/logger.h
 @@ -0,0 +1,82 @@
 +/*      $Id$
 +
@@ -580,8 +594,10 @@
 +
 +
 +#endif /* INC_LOGGER_H */
---- a/src/main.c
-+++ b/src/main.c
+Index: xfwm4-4.11.1-2ubuntu2/src/main.c
+===================================================================
+--- xfwm4-4.11.1-2ubuntu2.orig/src/main.c
++++ xfwm4-4.11.1-2ubuntu2/src/main.c
 @@ -62,6 +62,7 @@
  #include "startup_notification.h"
  #include "compositor.h"
@@ -590,7 +606,7 @@
  
  #define BASE_EVENT_MASK \
      SubstructureNotifyMask|\
-@@ -144,6 +145,7 @@
+@@ -144,6 +145,7 @@ cleanUp (void)
  
      TRACE ("entering cleanUp");
  
@@ -598,7 +614,7 @@
      setupHandler (FALSE);
  
      g_return_if_fail (main_display_info);
-@@ -441,6 +443,7 @@
+@@ -441,6 +443,7 @@ initialize (gint compositor_mode, gboole
      initModifiers (main_display_info->dpy);
  
      setupHandler (TRUE);
@@ -606,8 +622,10 @@
  
      nscreens = gdk_display_get_n_screens (main_display_info->gdisplay);
      for(i = 0; i < nscreens; i++)
+Index: xfwm4-4.11.1-2ubuntu2/src/sync_source.c
+===================================================================
 --- /dev/null
-+++ b/src/sync_source.c
++++ xfwm4-4.11.1-2ubuntu2/src/sync_source.c
 @@ -0,0 +1,124 @@
 +/*      $Id$
 +
@@ -733,8 +751,10 @@
 +    return source_id;
 +}
 +
+Index: xfwm4-4.11.1-2ubuntu2/src/sync_source.h
+===================================================================
 --- /dev/null
-+++ b/src/sync_source.h
++++ xfwm4-4.11.1-2ubuntu2/src/sync_source.h
 @@ -0,0 +1,56 @@
 +/*      $Id$
 +
@@ -792,9 +812,11 @@
 +unsigned int sync_source_run (SyncSource *source, GSourceFunc callback);
 +
 +#endif /* INC_SYNC_SOURCE_H */
+Index: xfwm4-4.11.1-2ubuntu2/src/zeitgeist_manager.c
+===================================================================
 --- /dev/null
-+++ b/src/zeitgeist_manager.c
-@@ -0,0 +1,340 @@
++++ xfwm4-4.11.1-2ubuntu2/src/zeitgeist_manager.c
+@@ -0,0 +1,341 @@
 +/*      $Id$
 +
 +        This program is free software; you can redistribute it and/or modify
@@ -986,7 +1008,8 @@
 +            manager->currentWinTime = (double) now;
 +        }
 +
-+        for (GList *iter = g_hash_table_get_keys (manager->activeWins); iter; iter = iter->next)
++        GList *iter = NULL;
++        for (iter = g_hash_table_get_keys (manager->activeWins); iter; iter = iter->next)
 +        {
 +            ZeitgeistWindow *zwin = g_hash_table_lookup (manager->activeWins, g_list_nth_data (iter, 0));
 +            if(!zwin)
@@ -1012,7 +1035,7 @@
 +                zeitgeist_subject_set_manifestation (subject, ZEITGEIST_NFO_SOFTWARE_ITEM);
 +                zeitgeist_subject_set_mimetype (subject, "application/octet-stream");
 +
-+                char *displayUri = g_strdup_printf ("UCL Study active window ('%s') was active for %d seconds", zwin->title, activeDuration);
++                char *displayUri = g_strdup_printf ("UCL Study active window ('%s') was active for %f seconds", zwin->title, activeDuration);
 +                zeitgeist_subject_set_text (subject, displayUri);
 +                free (displayUri);
 +
@@ -1135,8 +1158,10 @@
 +    g_hash_table_insert (mgr->activeWinDurations, GULONG_TO_POINTER (xid), newDuration);
 +}
 +
+Index: xfwm4-4.11.1-2ubuntu2/src/zeitgeist_manager.h
+===================================================================
 --- /dev/null
-+++ b/src/zeitgeist_manager.h
++++ xfwm4-4.11.1-2ubuntu2/src/zeitgeist_manager.h
 @@ -0,0 +1,80 @@
 +/*      $Id$
 +

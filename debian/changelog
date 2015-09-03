@@ -1,3 +1,9 @@
+xfwm4 (4.11.1-2ubuntu2ppa11) trusty; urgency=medium
+
+  * Attempting to make dpkg happy about some files that are not even versioned...
+
+ -- Steve Dodier-Lazaro <sidnioulz@gmail.com>  Thu, 03 Sep 2015 22:09:02 +0100
+
 xfwm4 (4.11.1-2ubuntu2ppa10) trusty; urgency=medium
 
   * Fix up the zeitgeist manager code (std99 + format string bugs)
