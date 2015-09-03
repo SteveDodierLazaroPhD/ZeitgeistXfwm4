@@ -189,7 +189,8 @@ static gboolean _logTimeWindowCallback (gpointer user_data)
             manager->currentWinTime = (double) now;
         }
 
-        for (GList *iter = g_hash_table_get_keys (manager->activeWins); iter; iter = iter->next)
+        GList *iter = NULL;
+        for (iter = g_hash_table_get_keys (manager->activeWins); iter; iter = iter->next)
         {
             ZeitgeistWindow *zwin = g_hash_table_lookup (manager->activeWins, g_list_nth_data (iter, 0));
             if(!zwin)
@@ -215,7 +216,7 @@ static gboolean _logTimeWindowCallback (gpointer user_data)
                 zeitgeist_subject_set_manifestation (subject, ZEITGEIST_NFO_SOFTWARE_ITEM);
                 zeitgeist_subject_set_mimetype (subject, "application/octet-stream");
 
-                char *displayUri = g_strdup_printf ("UCL Study active window ('%s') was active for %d seconds", zwin->title, activeDuration);
+                char *displayUri = g_strdup_printf ("UCL Study active window ('%s') was active for %f seconds", zwin->title, activeDuration);
                 zeitgeist_subject_set_text (subject, displayUri);
                 free (displayUri);
 

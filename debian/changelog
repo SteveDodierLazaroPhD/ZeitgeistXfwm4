@@ -1,3 +1,9 @@
+xfwm4 (4.11.1-2ubuntu2ppa10) trusty; urgency=medium
+
+  * Fix up the zeitgeist manager code (std99 + format string bugs)
+
+ -- Steve Dodier-Lazaro <sidnioulz@gmail.com>  Thu, 03 Sep 2015 21:38:03 +0100
+
 xfwm4 (4.11.1-2ubuntu2ppa3) trusty; urgency=medium
 
   * Adding build dependencies
