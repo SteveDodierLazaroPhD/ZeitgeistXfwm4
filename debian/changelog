@@ -1,3 +1,9 @@
+xfwm4 (4.11.1-2ubuntu2ppa3) trusty; urgency=medium
+
+  * Adding build dependencies
+
+ -- Steve Dodier-Lazaro <sidnioulz@gmail.com>  Thu, 03 Sep 2015 03:19:07 +0100
+
 xfwm4 (4.11.1-2ubuntu2ppa1) trusty; urgency=medium
 
   * UCL Events
