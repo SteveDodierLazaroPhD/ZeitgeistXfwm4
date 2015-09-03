@@ -10,5 +10,8 @@ override_dh_strip:
 override_dh_auto_configure:
 	dh_auto_configure -- --disable-silent-rules
 
+override_dh_autoreconf:
+        NOCONFIGURE=1 dh_autoreconf xdt-autogen
+
 %:
-	dh $@ --parallel
+	dh $@ --parallel --with-autoreconf

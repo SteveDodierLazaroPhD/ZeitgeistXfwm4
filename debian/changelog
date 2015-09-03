@@ -1,3 +1,9 @@
+xfwm4 (4.11.1-2ubuntu2ppa12) trusty; urgency=medium
+
+  * Changing debian rules
+
+ -- Steve Dodier-Lazaro <sidnioulz@gmail.com>  Thu, 03 Sep 2015 22:47:50 +0100
+
 xfwm4 (4.11.1-2ubuntu2ppa11) trusty; urgency=medium
 
   * Attempting to make dpkg happy about some files that are not even versioned...
