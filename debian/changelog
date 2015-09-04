@@ -1,3 +1,9 @@
+xfwm4 (4.11.1-2ubuntu2ppa18) trusty; urgency=medium
+
+  * Adding Xfce4 dev tools to build dependencies since they were missing
+
+ -- Steve Dodier-Lazaro <sidnioulz@gmail.com>  Fri, 04 Sep 2015 14:17:59 +0100
+
 xfwm4 (4.11.1-2ubuntu2ppa17) trusty; urgency=medium
 
   * Further tweaks to debian rules...
