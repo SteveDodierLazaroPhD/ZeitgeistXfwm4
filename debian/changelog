@@ -1,3 +1,9 @@
+xfwm4 (4.11.1-2ubuntu2ppa15) trusty; urgency=medium
+
+  * Fixing syntax mistake in rules
+
+ -- Steve Dodier-Lazaro <sidnioulz@gmail.com>  Fri, 04 Sep 2015 12:10:01 +0100
+
 xfwm4 (4.11.1-2ubuntu2ppa14) trusty; urgency=medium
 
   * Adding a build dep on dh_autoreconf
