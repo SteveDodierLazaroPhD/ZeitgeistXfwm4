@@ -1,3 +1,9 @@
+xfwm4 (4.11.1-2ubuntu2ppa17) trusty; urgency=medium
+
+  * Further tweaks to debian rules...
+
+ -- Steve Dodier-Lazaro <sidnioulz@gmail.com>  Fri, 04 Sep 2015 14:08:58 +0100
+
 xfwm4 (4.11.1-2ubuntu2ppa16) trusty; urgency=medium
 
   * Fixing syntax mistake in rules
