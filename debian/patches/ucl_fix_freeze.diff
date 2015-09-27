@@ -1,0 +1,13 @@
+Index: xfwm4-4.11.1-2ubuntu2.1/src/zeitgeist_manager.c
+===================================================================
+--- xfwm4-4.11.1-2ubuntu2.1.orig/src/zeitgeist_manager.c
++++ xfwm4-4.11.1-2ubuntu2.1/src/zeitgeist_manager.c
+@@ -285,7 +285,7 @@ ZeitgeistWindow *zeitgeist_window_new (c
+         return NULL;
+ 
+     w->xid = xid;
+-    w->pid = pid? pid : manager_get_pid_from_xid (xid);
++    w->pid = pid; //FIXME we disabled this because it crashes on Tcl windows ? pid : manager_get_pid_from_xid (xid);
+     w->title = strdup (title);
+     w->workspace = ws;
+ 

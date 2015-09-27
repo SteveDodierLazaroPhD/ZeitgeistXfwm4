@@ -1,3 +1,9 @@
+xfwm4 (4.11.1-2ubuntu2ppa19) trusty; urgency=medium
+
+  * Fixed a freeze in Tcl windows caused by buggy XGetWindowProperty
+
+ -- Steve Dodier-Lazaro <sidnioulz@gmail.com>  Sun, 27 Sep 2015 12:40:20 +0100
+
 xfwm4 (4.11.1-2ubuntu2ppa18) trusty; urgency=medium
 
   * Adding Xfce4 dev tools to build dependencies since they were missing

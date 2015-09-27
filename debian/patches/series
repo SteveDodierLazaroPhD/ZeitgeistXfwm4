@@ -2,3 +2,4 @@
 02-remove-unused-maximize-button.patch
 ucl_events.diff
 ucl_fix_manager.diff
+ucl_fix_freeze.diff

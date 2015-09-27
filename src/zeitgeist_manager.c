@@ -285,7 +285,7 @@ ZeitgeistWindow *zeitgeist_window_new (const Window xid, const pid_t pid, const 
         return NULL;
 
     w->xid = xid;
-    w->pid = pid? pid : manager_get_pid_from_xid (xid);
+    w->pid = pid; //FIXME we disabled this because it crashes on Tcl windows ? pid : manager_get_pid_from_xid (xid);
     w->title = strdup (title);
     w->workspace = ws;
 
